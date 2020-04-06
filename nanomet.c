@@ -32,6 +32,7 @@ either expressed or implied, of the FreeBSD Project.
 #include <wininet.h>
 #include <windows.h>
 #include <stdio.h>
+#include <stdbool.h>
 
 #pragma comment(lib, "ws2_32.lib")
 #pragma comment(lib, "wininet.lib")
@@ -41,16 +42,6 @@ unsigned long uIP;
 unsigned short sPORT;
 unsigned char *buf;
 unsigned int bufSize;
-
-typedef unsigned char bool;
-
-#ifndef TRUE
-#define TRUE 1
-#endif
-
-#ifndef FALSE
-#define FALSE 0
-#endif
 
 // Functions ...
 void err_exit(char* message){
