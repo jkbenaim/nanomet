@@ -34,9 +34,6 @@ either expressed or implied, of the FreeBSD Project.
 #include <stdio.h>
 #include <stdbool.h>
 
-#pragma comment(lib, "ws2_32.lib")
-#pragma comment(lib, "wininet.lib")
-
 // Globals ...
 unsigned long uIP;
 unsigned short sPORT;
@@ -45,7 +42,7 @@ unsigned int bufSize;
 
 // Functions ...
 void err_exit(char* message){
-	printf("\nError: %s\nGetLastError:%d", message, GetLastError());
+	printf("\nError: %s\nGetLastError:%ld", message, GetLastError());
 	exit(-1);
 }
 
@@ -106,7 +103,7 @@ unsigned char* met_tcp(char* host, char* port, bool bind_tcp)
 	server.sin_family = AF_INET;
 	server.sin_port = sPORT;
 
-	sckt = socket(AF_INET, SOCK_STREAM, NULL);
+	sckt = socket(AF_INET, SOCK_STREAM, 0);
 
 	if (sckt == INVALID_SOCKET){
 		err_exit("socket()");
@@ -208,19 +205,19 @@ unsigned char* rev_http(char* host, char* port, bool WithSSL){
 	//	   InternetOpen, InternetConnect, HttpOpenRequest, HttpSendRequest, InternetReadFile.
 
 	//	3.1: HINTERNET InternetOpen(_In_  LPCTSTR lpszAgent, _In_  DWORD dwAccessType, _In_  LPCTSTR lpszProxyName, _In_  LPCTSTR lpszProxyBypass, _In_  DWORD dwFlags);
-	hInternetOpen = InternetOpen("Mozilla/4.0 (compatible; MSIE 6.1; Windows NT)", INTERNET_OPEN_TYPE_PRECONFIG, NULL, NULL, NULL);
+	hInternetOpen = InternetOpen("Mozilla/4.0 (compatible; MSIE 6.1; Windows NT)", INTERNET_OPEN_TYPE_PRECONFIG, NULL, NULL, 0);
 	if (hInternetOpen == NULL){
 		err_exit("InternetOpen()");
 	}
 
 	// 3.2: InternetConnect
-	hInternetConnect = InternetConnect(hInternetOpen, host, atoi(port), NULL, NULL, INTERNET_SERVICE_HTTP, NULL, NULL);
+	hInternetConnect = InternetConnect(hInternetOpen, host, atoi(port), NULL, NULL, INTERNET_SERVICE_HTTP, 0, 0);
 	if (hInternetConnect == NULL){
 		err_exit("InternetConnect()");
 	}
 
 	// 3.3: HttpOpenRequest
-	hHTTPOpenRequest = HttpOpenRequest(hInternetConnect, "GET", FullURL, NULL, NULL, NULL, flags, NULL);
+	hHTTPOpenRequest = HttpOpenRequest(hInternetConnect, "GET", FullURL, NULL, NULL, NULL, flags, 0);
 	if (hHTTPOpenRequest == NULL){
 		err_exit("HttpOpenRequest()");
 	}
@@ -231,8 +228,8 @@ unsigned char* rev_http(char* host, char* port, bool WithSSL){
 		InternetSetOption(hHTTPOpenRequest, INTERNET_OPTION_SECURITY_FLAGS, &dwSecFlags, sizeof(dwSecFlags));
 	}
 
-	// 3.5: HttpSendRequest 
-	if (!HttpSendRequest(hHTTPOpenRequest, NULL, NULL, NULL, NULL))
+	// 3.5: HttpSendRequest
+	if (!HttpSendRequest(hHTTPOpenRequest, NULL, 0, NULL, 0))
 	{
 		err_exit("HttpSendRequest()");
 	}
@@ -263,20 +260,6 @@ unsigned char* rev_http(char* host, char* port, bool WithSSL){
 //	mbstowcs(wcstring, orig, newsize);
 //	return wcstring;
 //}
-
-#ifdef WINDOWSMAIN
-int WINAPI WinMain (HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdShow) 
-{
-
-	mainw(__argc, __argv);
-	return 0;
-}
-#else
-int main (int argc, char *argv[])
-{
-	mainw(argc,argv);
-}
-#endif
 
 int mainw (int argc, char *argv[])
 {
@@ -327,3 +310,16 @@ int mainw (int argc, char *argv[])
 	exit(0);
 }
 
+#ifdef WINDOWSMAIN
+int WINAPI WinMain (HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdShow)
+{
+
+	mainw(__argc, __argv);
+	return 0;
+}
+#else
+int main (int argc, char *argv[])
+{
+	mainw(argc,argv);
+}
+#endif
