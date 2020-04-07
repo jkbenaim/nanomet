@@ -202,7 +202,7 @@ unsigned char* rev_http(char* host, char* port, bool WithSSL){
 	//***************************************************************//
 
 	// Variables
-	char URI[17] = { 0 };	//4 chars ... it can be any length actually.
+	char URI[33] = { 0 };	// must be 16*n + 1 chars, so 17, 33, 49, ...
 	char FullURL[sizeof(URI)+1] = { 0 };	// FullURL is ("/" + URI)
 	unsigned char* buffer = NULL;
 	DWORD flags = 0;
